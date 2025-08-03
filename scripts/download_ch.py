@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Download Companies House monthly ZIP files.
+"""Download Companies House current snapshot files.
 
 Usage:
-    python scripts/download_ch.py --start 2024-01 --end 2024-03 --dataset Accounts_Bulk_Data
+    python scripts/download_ch.py
 
-By default, downloads the current month's file for the BasicCompanyData feed.
+Downloads the current BasicCompanyData snapshot (all parts).
 Files are stored under ``data/raw/ch``.
 """
 
 from __future__ import annotations
 
-import argparse
-from datetime import date, datetime
+import re
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -19,66 +18,89 @@ from urllib.request import Request, urlopen
 BASE_URL = "https://download.companieshouse.gov.uk"
 
 
-def month_range(start: date, end: date):
-    """Yield first-of-month dates from start to end inclusive."""
-    current = start
-    while current <= end:
-        yield current
-        # increment month
-        if current.month == 12:
-            current = date(current.year + 1, 1, 1)
-        else:
-            current = date(current.year, current.month + 1, 1)
+def get_current_snapshot_info():
+    """Scrape the download page to find current snapshot files."""
+    url = f"{BASE_URL}/en_output.html"
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
+    try:
+        with urlopen(req) as resp:
+            content = resp.read().decode("utf-8")
+
+        # Find all BasicCompanyData file links
+        pattern = r"BasicCompanyData-(\d{4}-\d{2}-\d{2})-part(\d+)_(\d+)\.zip"
+        matches = re.findall(pattern, content)
+
+        if not matches:
+            print("No BasicCompanyData files found on download page")
+            return None, []
+
+        # Get the date and total parts from first match
+        date_str = matches[0][0]
+        total_parts = int(matches[0][2])
+
+        # Generate all part filenames
+        files = []
+        for part in range(1, total_parts + 1):
+            filename = f"BasicCompanyData-{date_str}-part{part}_{total_parts}.zip"
+            files.append(filename)
+
+        return date_str, files
+
+    except Exception as e:
+        print(f"Failed to get snapshot info: {e}")
+        return None, []
 
 
-def download_file(prefix: str, month: date, out_dir: Path) -> None:
-    """Download a single monthly file if possible."""
-    filename = f"{prefix}-{month.year}-{month.month:02d}.zip"
+def download_file(filename: str, out_dir: Path) -> bool:
+    """Download a single file."""
     url = f"{BASE_URL}/{filename}"
     dest = out_dir / filename
+
     if dest.exists():
         print(f"Skipping {filename}, already exists")
-        return
+        return True
 
     print(f"Fetching {url}")
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
     try:
         with urlopen(req) as resp, open(dest, "wb") as f:
             f.write(resp.read())
         print(f"Downloaded {filename}")
+        return True
     except HTTPError as e:
         print(f"Failed to download {filename}: HTTP {e.code}")
+        return False
     except URLError as e:
         print(f"Failed to download {filename}: {e.reason}")
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download Companies House monthly ZIPs")
-    parser.add_argument("--start", type=str, help="Start date YYYY-MM", required=False)
-    parser.add_argument("--end", type=str, help="End date YYYY-MM", required=False)
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="basiccompanydata",
-        help="Dataset prefix, e.g. accounts_bulk_data or BasicCompanyData (case-insensitive; underscores ignored)",
-    )
-    return parser.parse_args()
+        return False
 
 
 def main() -> None:
-    args = parse_args()
-    today = date.today().replace(day=1)
-    start = (
-        datetime.strptime(args.start, "%Y-%m").date() if args.start else today
-    )
-    end = datetime.strptime(args.end, "%Y-%m").date() if args.end else start
-
     out_dir = Path("data/raw/ch")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    dataset = args.dataset.replace("_", "").lower()
-    for month in month_range(start, end):
-        download_file(dataset, month, out_dir)
+    print("Getting current snapshot information...")
+    date_str, files = get_current_snapshot_info()
+
+    if not files:
+        print("No files to download")
+        return
+
+    print(f"Found snapshot from {date_str} with {len(files)} parts")
+
+    success_count = 0
+    for filename in files:
+        if download_file(filename, out_dir):
+            success_count += 1
+
+    print(f"\nDownloaded {success_count}/{len(files)} files successfully")
+
+    if success_count == len(files):
+        print(f"All files saved to: {out_dir}")
+    else:
+        print("Some downloads failed - check the output above")
 
 
 if __name__ == "__main__":
