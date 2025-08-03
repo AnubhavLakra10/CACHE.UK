@@ -7,6 +7,8 @@ dependencies:
   - pytorch=2.0.1 # available on Windows
   - cpuonly
   - sentencepiece
+  - pandas
+  - matplotlib
   - pip
   - pip:
       - transformers==4.51.0
