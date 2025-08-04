@@ -1,2 +1,6 @@
 *.arrow filter=lfs diff=lfs merge=lfs -text
 data/cleaned/news_uk_finance.csv filter=lfs diff=lfs merge=lfs -text
+data/cleaned/*.csv filter=lfs diff=lfs merge=lfs -text
+data/raw/**/*.json filter=lfs diff=lfs merge=lfs -text
+data/parquet/**/*.parquet filter=lfs diff=lfs merge=lfs -text
+data/**/*.{csv,json,zip,arrow,parquet,txt,tup,sent,pointer} filter=lfs diff=lfs merge=lfs -text
