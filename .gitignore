@@ -208,6 +208,9 @@ __marimo__/
 
 # Raw data artifacts
 data/raw/*
+# --- Keep the uktwit dataset ---
+!data/raw/uktwit/
+!data/raw/uktwit/**
 !data/raw/ch/
 !data/raw/rns/
 data/raw/ch/*
